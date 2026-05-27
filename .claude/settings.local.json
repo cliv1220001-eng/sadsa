@@ -10,7 +10,8 @@
       "PowerShell(\"removed .next\")",
       "PowerShell(node --version)",
       "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_cheat_test.mts\")",
-      "PowerShell(\"deleted temp test\")"
+      "PowerShell(\"deleted temp test\")",
+      "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_balance_q.mts\" 2>$null)"
     ]
   }
 }

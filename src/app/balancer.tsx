@@ -83,7 +83,7 @@ function parseBulk(text: string): { name: string; mmr: string; role: Role | null
     // Skip a header row like "Players | MMR | Role".
     if (/^players?$/i.test(name) && /mmr/i.test(cols[1] ?? "")) continue;
 
-    const mmr = (cols[1] ?? "").replace(/[^0-9]/g, "").slice(0, 4);
+    const mmr = (cols[1] ?? "").replace(/[^0-9]/g, "").slice(0, 5);
     out.push({ name, mmr, role: parseRole(cols[2]) });
   }
   return out;
@@ -101,6 +101,7 @@ export default function Balancer() {
 
   // Transient UI state (not persisted).
   const [shuffleKey, setShuffleKey] = useState(0);
+  const [shuffling, setShuffling] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
 
@@ -170,15 +171,20 @@ export default function Balancer() {
   }
 
   function generate() {
-    if (!canGenerate) return;
+    if (!canGenerate || shuffling) return;
     const players: Player[] = ready.map((r) => ({
       id: r.id,
       name: r.name.trim(),
       mmr: Math.round(Number(r.mmr)),
       role: r.role,
     }));
-    setResult(generateTeams(players, numTeams, mode));
-    setShuffleKey((k) => k + 1);
+    // Brief loading beat so the shuffle is visibly "working".
+    setShuffling(true);
+    window.setTimeout(() => {
+      setResult(generateTeams(players, numTeams, mode));
+      setShuffleKey((k) => k + 1);
+      setShuffling(false);
+    }, 1000);
   }
 
   function sendToBracket() {
@@ -243,10 +249,10 @@ export default function Balancer() {
             <input
               value={row.mmr}
               onChange={(e) =>
-                update(row.id, { mmr: e.target.value.replace(/[^0-9]/g, "").slice(0, 4) })
+                update(row.id, { mmr: e.target.value.replace(/[^0-9]/g, "").slice(0, 5) })
               }
               inputMode="numeric"
-              maxLength={4}
+              maxLength={5}
               placeholder="MMR"
               className="field rounded-md px-2.5 py-1.5 text-[13px] tabular-nums"
             />
@@ -348,10 +354,13 @@ export default function Balancer() {
             </button>
             <button
               onClick={generate}
-              disabled={!canGenerate}
-              className="btn-neon rounded-full px-6 py-2.5 text-sm"
+              disabled={!canGenerate || shuffling}
+              className="btn-neon flex items-center gap-2 rounded-full px-6 py-2.5 text-sm"
             >
-              {result ? "Reshuffle" : "Generate Teams"}
+              {shuffling && (
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              )}
+              {shuffling ? "Shuffling…" : result ? "Reshuffle" : "Generate Teams"}
             </button>
           </div>
         </div>
@@ -389,9 +398,6 @@ export default function Balancer() {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {result.teams.map((team, i) => {
               const accent = TEAM_ACCENTS[i % TEAM_ACCENTS.length];
-              const avg = team.players.length
-                ? Math.round(team.totalMmr / team.players.length)
-                : 0;
               return (
                 <div
                   key={team.id}
@@ -406,10 +412,8 @@ export default function Balancer() {
                     <h2 className="text-base font-extrabold" style={{ color: accent }}>
                       Team {team.id}
                     </h2>
-                    <span className="text-right text-[11px] leading-tight text-zinc-400">
-                      <span className="font-bold tabular-nums text-zinc-200">{team.totalMmr}</span>
-                      <br />
-                      {avg} avg
+                    <span className="text-[11px] font-bold tabular-nums text-zinc-200">
+                      {team.totalMmr}
                     </span>
                   </div>
                   <ul className="flex flex-col gap-1.5">
