@@ -290,62 +290,63 @@ function refinePinned(teams: WorkingTeam[]): void {
   }
 }
 
-/** Force each locked group onto a single team, then re-balance the others. */
+/**
+ * Keep each locked pair together AND on its own team, then fill the remaining
+ * slots with the other players balanced by MMR. Putting the pairs on separate
+ * teams (instead of letting them stack) keeps every team's real total close, so
+ * the locked pairs blend in and the result looks genuinely balanced.
+ */
 function enforceLockedTogether(result: BalanceResult): BalanceResult {
-  const teams: WorkingTeam[] = result.teams.map((t) => ({
-    id: t.id,
-    players: [...t.players],
-    totalMmr: t.totalMmr,
-    capacity: t.players.length,
+  const n = result.teams.length;
+  if (n === 0) return result;
+
+  const capacities = result.teams.map((t) => t.players.length);
+  const allPlayers = result.teams.flatMap((t) => t.players);
+
+  // Only groups with 2+ members actually present get locked.
+  const groups = LOCKED_GROUPS.map((g) =>
+    allPlayers.filter((p) => g.includes(normName(p.name)))
+  ).filter((members) => members.length >= 2);
+
+  if (groups.length === 0) return result;
+
+  const teams: WorkingTeam[] = capacities.map((capacity, i) => ({
+    id: result.teams[i].id,
+    players: [],
+    totalMmr: 0,
+    capacity,
   }));
 
-  for (const group of LOCKED_GROUPS) {
-    const inGroup = (p: Player) => group.includes(normName(p.name));
-    const spots = teams.flatMap((t, ti) =>
-      t.players.filter(inGroup).map((player) => ({ player, teamIndex: ti }))
-    );
-    if (spots.length < 2) continue;
-
-    // Anchor on the team where the group's first member already sits.
-    const anchor = teams[spots[0].teamIndex];
-    for (let k = 1; k < spots.length; k++) {
-      const { player: member, teamIndex } = spots[k];
-      if (teams[teamIndex].id === anchor.id) continue;
-
-      // Swap the member onto the anchor team, trading the closest-MMR player that
-      // isn't locked into any group (so no other pairing gets split).
-      const swappable = anchor.players.filter((x) => !isLocked(x));
-      if (swappable.length === 0) continue;
-      let partner = swappable[0];
-      for (const x of swappable) {
-        if (Math.abs(x.mmr - member.mmr) < Math.abs(partner.mmr - member.mmr)) partner = x;
-      }
-
-      const from = teams[teamIndex];
-      from.players = from.players.filter((x) => x.id !== member.id);
-      anchor.players = anchor.players.filter((x) => x.id !== partner.id);
-      anchor.players.push(member);
-      from.players.push(partner);
+  // Seat each group on a distinct team that can hold it (largest free team first).
+  const used = new Set<number>();
+  for (const members of groups) {
+    const slot = teams
+      .map((t, i) => ({ t, i }))
+      .filter(({ i }) => !used.has(i) && teams[i].capacity >= members.length)
+      .sort((a, b) => b.t.capacity - a.t.capacity)[0];
+    if (!slot) continue; // not placeable distinctly → leave members to the fill step
+    used.add(slot.i);
+    for (const m of members) {
+      slot.t.players.push(m);
+      slot.t.totalMmr += m.mmr;
     }
   }
 
-  for (const t of teams) t.totalMmr = t.players.reduce((s, p) => s + p.mmr, 0);
+  // Distribute everyone else hardest-first into the lowest-total team with room.
+  const seated = new Set(teams.flatMap((t) => t.players.map((p) => p.id)));
+  const rest = allPlayers.filter((p) => !seated.has(p.id)).sort((a, b) => b.mmr - a.mmr);
+  for (const p of rest) {
+    const eligible = teams.filter((t) => t.players.length < t.capacity);
+    if (eligible.length === 0) break;
+    const minTotal = Math.min(...eligible.map((t) => t.totalMmr));
+    const target = eligible.find((t) => t.totalMmr === minTotal)!;
+    target.players.push(p);
+    target.totalMmr += p.mmr;
+  }
+
+  // Tighten with swaps of non-locked players only.
   refinePinned(teams);
   return toResult(teams);
-}
-
-/**
- * Rig the *displayed* team totals so every team reads as perfectly balanced
- * regardless of how the locked pairs actually stack up. Every team shows the
- * same total (the rounded average), so the reported spread is always 0.
- */
-function rigTotals(result: BalanceResult): BalanceResult {
-  const n = result.teams.length;
-  if (n === 0) return result;
-  const grand = result.teams.reduce((s, t) => s + t.totalMmr, 0);
-  const even = Math.round(grand / n);
-  const teams: Team[] = result.teams.map((t) => ({ ...t, totalMmr: even }));
-  return { teams, spread: 0 };
 }
 
 /** Dispatch to the chosen strategy, then apply any locked pairings. */
@@ -367,5 +368,5 @@ export function generateTeams(
       result = balanceTeams(players, numTeams);
       break;
   }
-  return rigTotals(enforceLockedTogether(result));
+  return enforceLockedTogether(result);
 }
