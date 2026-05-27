@@ -239,7 +239,7 @@ function refineSameRole(teams: WorkingTeam[]): void {
 const LOCKED_GROUPS: string[][] = [
   ["vit", "th1"],
   ["xanxanxan", "anaps", "tams"],
-  ["euruuu", "tewsss", "trevor"],
+  ["euruuu", "GON", "trevor"],
 ];
 
 // Lowercase, trim, and collapse runs of the same letter so "tewssss"/"tewsss"
