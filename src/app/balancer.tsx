@@ -102,6 +102,7 @@ export default function Balancer() {
   // Transient UI state (not persisted).
   const [shuffleKey, setShuffleKey] = useState(0);
   const [shuffling, setShuffling] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
 
@@ -185,24 +186,14 @@ export default function Balancer() {
       role: r.role,
     }));
 
-    // Show a few genuinely unlocked (fair) shuffles so onlookers see it isn't
-    // rigged, then land on the locked result for the final reveal.
+    // Brief loading beat so the shuffle is visibly "working".
     setShuffling(true);
-    const PREVIEWS = 4;
-    let frame = 0;
-    const tick = () => {
-      frame += 1;
-      if (frame <= PREVIEWS) {
-        setResult(generateTeams(players, numTeams, mode, false)); // fair, no locks
-        setShuffleKey((k) => k + 1);
-        window.setTimeout(tick, 300);
-      } else {
-        setResult(generateTeams(players, numTeams, mode, true)); // final: locked
-        setShuffleKey((k) => k + 1);
-        setShuffling(false);
-      }
-    };
-    window.setTimeout(tick, 300);
+    setRevealed(false); // keep the new teams hidden until the user reveals them
+    window.setTimeout(() => {
+      setResult(generateTeams(players, numTeams, mode));
+      setShuffleKey((k) => k + 1);
+      setShuffling(false);
+    }, 1000);
   }
 
   function sendToBracket() {
@@ -398,8 +389,22 @@ export default function Balancer() {
         </div>
       </div>
 
+      {/* Teams ready but hidden — reveal on demand */}
+      {result && !revealed && (
+        <section className="panel flex flex-col items-center gap-4 rounded-2xl py-14 text-center">
+          <span className="text-4xl">🎲</span>
+          <p className="text-zinc-400">Teams are ready.</p>
+          <button
+            onClick={() => setRevealed(true)}
+            className="btn-neon rounded-full px-8 py-3 text-sm"
+          >
+            Show Teams
+          </button>
+        </section>
+      )}
+
       {/* Results */}
-      {result && (
+      {result && revealed && (
         <section key={shuffleKey} className="flex flex-col gap-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-zinc-400">

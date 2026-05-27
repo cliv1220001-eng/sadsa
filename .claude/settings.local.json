@@ -16,7 +16,8 @@
       "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_var.mts\" 2>$null)",
       "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_teams.mts\" 2>$null)",
       "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_locks.mts\" 2>$null)",
-      "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_final.mts\" 2>$null)"
+      "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_final.mts\" 2>$null)",
+      "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_prob.mts\" 2>$null)"
     ]
   }
 }

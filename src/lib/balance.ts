@@ -96,7 +96,9 @@ function refine(teams: WorkingTeam[]): void {
 function toResult(teams: WorkingTeam[]): BalanceResult {
   const finalTeams: Team[] = teams.map((t) => ({
     id: t.id,
-    players: [...t.players].sort((a, b) => b.mmr - a.mmr),
+    // Random order (not sorted by MMR) so locked high-MMR players don't always
+    // cluster at the top of their team and give the rig away.
+    players: shuffled(t.players),
     totalMmr: t.totalMmr,
   }));
   return { teams: finalTeams, spread: spreadOf(finalTeams) };
@@ -237,10 +239,14 @@ function refineSameRole(teams: WorkingTeam[]): void {
 // teams. The rest of the teams are re-balanced around them so the reported
 // spread still looks legit.
 const LOCKED_GROUPS: string[][] = [
-  ["vit", "th1"],
+  ["vit", "Gunnar Wangdu"],
   ["xanxanxan", "anaps", "tams"],
-  ["euruuu", "GON", "trevor"],
+  ["euruuu", "th1", "trevor"],
 ];
+
+// Each locked group is forced together on roughly this fraction of shuffles; the
+// rest of the time it's left to a genuine split, so the rigging stays deniable.
+const LOCK_PROBABILITY = 0.7;
 
 // Lowercase, trim, and collapse runs of the same letter so "tewssss"/"tewsss"
 // and "euruuu"/"euruu" all match regardless of how many times a letter is typed.
@@ -322,11 +328,13 @@ function enforceLockedTogether(result: BalanceResult, mode: BalanceMode): Balanc
     capacity,
   }));
 
-  // Seat each group on a random distinct team that can hold it.
+  // Seat each group on a random distinct team that can hold it — but only on a
+  // ~LOCK_PROBABILITY fraction of shuffles; otherwise let it split genuinely.
   const order = shuffled(teams.map((_, i) => i));
   const used = new Set<number>();
   const seated = new Set<string>();
   for (const members of groups) {
+    if (Math.random() >= LOCK_PROBABILITY) continue; // this shuffle: leave it to chance
     const ti = order.find((i) => !used.has(i) && teams[i].capacity >= members.length);
     if (ti === undefined) continue; // can't seat distinctly → members fall to fill step
     used.add(ti);
