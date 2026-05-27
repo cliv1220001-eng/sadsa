@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(npm run build)",
+      "PowerShell(git init)",
+      "PowerShell(git add -A)",
+      "PowerShell(git branch -M main)",
+      "PowerShell(winget install --id Git.Git -e --source winget --silent --accept-package-agreements --accept-source-agreements)"
+    ]
+  }
+}
