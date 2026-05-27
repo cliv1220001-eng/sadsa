@@ -7,7 +7,10 @@
       "PowerShell(git branch -M main)",
       "PowerShell(winget install --id Git.Git -e --source winget --silent --accept-package-agreements --accept-source-agreements)",
       "PowerShell(npm run start)",
-      "PowerShell(\"removed .next\")"
+      "PowerShell(\"removed .next\")",
+      "PowerShell(node --version)",
+      "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_cheat_test.mts\")",
+      "PowerShell(\"deleted temp test\")"
     ]
   }
 }
