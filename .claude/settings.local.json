@@ -12,7 +12,11 @@
       "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_cheat_test.mts\")",
       "PowerShell(\"deleted temp test\")",
       "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_balance_q.mts\" 2>$null)",
-      "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_q.mts\" 2>$null)"
+      "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_q.mts\" 2>$null)",
+      "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_var.mts\" 2>$null)",
+      "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_teams.mts\" 2>$null)",
+      "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_locks.mts\" 2>$null)",
+      "PowerShell(node \"C:\\\\Users\\\\test\\\\dota-balancer\\\\temp_final.mts\" 2>$null)"
     ]
   }
 }

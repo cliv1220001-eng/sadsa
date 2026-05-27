@@ -105,13 +105,19 @@ export default function Balancer() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
 
-  const ready = useMemo(
-    () =>
-      rows.filter(
-        (r) => r.name.trim() !== "" && r.mmr.trim() !== "" && !Number.isNaN(Number(r.mmr))
-      ),
-    [rows]
-  );
+  const ready = useMemo(() => {
+    const valid = rows.filter(
+      (r) => r.name.trim() !== "" && r.mmr.trim() !== "" && !Number.isNaN(Number(r.mmr))
+    );
+    // Drop duplicate names (keep first) so no one is counted or placed twice.
+    const seen = new Set<string>();
+    return valid.filter((r) => {
+      const key = r.name.trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [rows]);
 
   // Dota teams are 5 players each — the team count follows the player count.
   const TEAM_SIZE = 5;
@@ -178,13 +184,25 @@ export default function Balancer() {
       mmr: Math.round(Number(r.mmr)),
       role: r.role,
     }));
-    // Brief loading beat so the shuffle is visibly "working".
+
+    // Show a few genuinely unlocked (fair) shuffles so onlookers see it isn't
+    // rigged, then land on the locked result for the final reveal.
     setShuffling(true);
-    window.setTimeout(() => {
-      setResult(generateTeams(players, numTeams, mode));
-      setShuffleKey((k) => k + 1);
-      setShuffling(false);
-    }, 1000);
+    const PREVIEWS = 4;
+    let frame = 0;
+    const tick = () => {
+      frame += 1;
+      if (frame <= PREVIEWS) {
+        setResult(generateTeams(players, numTeams, mode, false)); // fair, no locks
+        setShuffleKey((k) => k + 1);
+        window.setTimeout(tick, 300);
+      } else {
+        setResult(generateTeams(players, numTeams, mode, true)); // final: locked
+        setShuffleKey((k) => k + 1);
+        setShuffling(false);
+      }
+    };
+    window.setTimeout(tick, 300);
   }
 
   function sendToBracket() {
