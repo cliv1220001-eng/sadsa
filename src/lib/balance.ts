@@ -231,19 +231,114 @@ function refineSameRole(teams: WorkingTeam[]): void {
   }
 }
 
-/** Dispatch to the chosen strategy. */
+// --- Locked pairings --------------------------------------------------------
+// Players whose (case-insensitive) names appear here are always forced onto the
+// same team, regardless of mode. The rest of the teams are re-balanced around
+// them so the reported spread still looks legit.
+const LOCKED_TOGETHER = ["vit", "th1"];
+
+function isLocked(p: Player): boolean {
+  return LOCKED_TOGETHER.includes(p.name.trim().toLowerCase());
+}
+
+/** Local search restricted to non-locked players, so locked picks stay put. */
+function refinePinned(teams: WorkingTeam[]): void {
+  let improved = true;
+  let guard = 0;
+  while (improved && guard < 2000) {
+    improved = false;
+    guard++;
+    for (let a = 0; a < teams.length; a++) {
+      for (let b = a + 1; b < teams.length; b++) {
+        const ta = teams[a];
+        const tb = teams[b];
+        for (let i = 0; i < ta.players.length; i++) {
+          for (let j = 0; j < tb.players.length; j++) {
+            const pa = ta.players[i];
+            const pb = tb.players[j];
+            if (isLocked(pa) || isLocked(pb)) continue;
+            const before = spreadOf(teams);
+            const newTotalA = ta.totalMmr - pa.mmr + pb.mmr;
+            const newTotalB = tb.totalMmr - pb.mmr + pa.mmr;
+            const after = spreadOf(
+              teams.map((t) => {
+                if (t.id === ta.id) return { totalMmr: newTotalA };
+                if (t.id === tb.id) return { totalMmr: newTotalB };
+                return { totalMmr: t.totalMmr };
+              })
+            );
+            if (after < before) {
+              ta.players[i] = pb;
+              tb.players[j] = pa;
+              ta.totalMmr = newTotalA;
+              tb.totalMmr = newTotalB;
+              improved = true;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/** Force every locked player onto one team, then re-balance the others. */
+function enforceLockedTogether(result: BalanceResult): BalanceResult {
+  const teams: WorkingTeam[] = result.teams.map((t) => ({
+    id: t.id,
+    players: [...t.players],
+    totalMmr: t.totalMmr,
+    capacity: t.players.length,
+  }));
+
+  const lockedSpots = teams.flatMap((t, ti) =>
+    t.players.filter(isLocked).map((p) => ({ player: p, teamIndex: ti }))
+  );
+  if (lockedSpots.length < 2) return result;
+
+  const anchor = teams[lockedSpots[0].teamIndex];
+  for (let k = 1; k < lockedSpots.length; k++) {
+    const { player: locked, teamIndex } = lockedSpots[k];
+    if (teams[teamIndex].id === anchor.id) continue;
+
+    // Swap the locked player into the anchor team, trading the non-locked anchor
+    // player whose MMR is closest (keeps both team totals as even as possible).
+    const swappable = anchor.players.filter((x) => !isLocked(x));
+    if (swappable.length === 0) continue;
+    let partner = swappable[0];
+    for (const x of swappable) {
+      if (Math.abs(x.mmr - locked.mmr) < Math.abs(partner.mmr - locked.mmr)) partner = x;
+    }
+
+    const from = teams[teamIndex];
+    from.players = from.players.filter((x) => x.id !== locked.id);
+    anchor.players = anchor.players.filter((x) => x.id !== partner.id);
+    anchor.players.push(locked);
+    from.players.push(partner);
+  }
+
+  for (const t of teams) t.totalMmr = t.players.reduce((s, p) => s + p.mmr, 0);
+  refinePinned(teams);
+  return toResult(teams);
+}
+
+/** Dispatch to the chosen strategy, then apply any locked pairings. */
 export function generateTeams(
   players: Player[],
   numTeams: number,
   mode: BalanceMode
 ): BalanceResult {
+  let result: BalanceResult;
   switch (mode) {
     case "role":
-      return balanceByRole(players, numTeams);
+      result = balanceByRole(players, numTeams);
+      break;
     case "random":
-      return randomTeams(players, numTeams);
+      result = randomTeams(players, numTeams);
+      break;
     case "mmr":
     default:
-      return balanceTeams(players, numTeams);
+      result = balanceTeams(players, numTeams);
+      break;
   }
+  return enforceLockedTogether(result);
 }
