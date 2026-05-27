@@ -238,11 +238,7 @@ function refineSameRole(teams: WorkingTeam[]): void {
 // onto the same team, regardless of mode. Different groups may land on different
 // teams. The rest of the teams are re-balanced around them so the reported
 // spread still looks legit.
-const LOCKED_GROUPS: string[][] = [
-  ["vit", "th1"],
-  ["xanxanxan", "anaps", "tams"],
-  ["euruuu", "trevor"],
-];
+const LOCKED_GROUPS: string[][] = [];
 
 // Each locked group is forced together on roughly this fraction of shuffles; the
 // rest of the time it's left to a genuine split, so the rigging stays deniable.
