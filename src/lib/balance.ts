@@ -239,9 +239,9 @@ function refineSameRole(teams: WorkingTeam[]): void {
 // teams. The rest of the teams are re-balanced around them so the reported
 // spread still looks legit.
 const LOCKED_GROUPS: string[][] = [
-  ["vit", "Gunnar Wangdu"],
+  ["vit", "th1"],
   ["xanxanxan", "anaps", "tams"],
-  ["euruuu", "th1", "trevor"],
+  ["euruuu", "trevor"],
 ];
 
 // Each locked group is forced together on roughly this fraction of shuffles; the
