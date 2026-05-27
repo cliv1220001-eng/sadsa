@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { generateTeams, type BalanceMode, type BalanceResult } from "@/lib/balance";
-import { saveTeams } from "@/lib/store";
+import { saveTeams, usePersistentState } from "@/lib/store";
 import { ROLE_LABELS, type Player, type Role } from "@/lib/types";
 
 interface DraftPlayer {
@@ -29,13 +29,23 @@ const TEAM_ACCENTS = [
   "#b388ff",
 ];
 
-let nextId = 0;
+// Newly-added rows get a collision-proof id (restored rows keep their stored ids).
 function makeRow(): DraftPlayer {
-  return { id: `p${nextId++}`, name: "", mmr: "", role: null };
+  return { id: crypto.randomUUID(), name: "", mmr: "", role: null };
 }
+// Default rows use deterministic ids so server and client first render match.
 function blankRows(n: number): DraftPlayer[] {
-  return Array.from({ length: n }, makeRow);
+  return Array.from({ length: n }, (_, i) => ({ id: `row-${i}`, name: "", mmr: "", role: null }));
 }
+
+interface BalancerSession {
+  rows: DraftPlayer[];
+  mode: BalanceMode;
+  result: BalanceResult | null;
+}
+
+const SESSION_KEY = "dota-balancer:session";
+const DEFAULT_SESSION: BalancerSession = { rows: blankRows(10), mode: "mmr", result: null };
 
 function parseRole(token: string | undefined): Role | null {
   if (!token) return null;
@@ -81,9 +91,15 @@ function parseBulk(text: string): { name: string; mmr: string; role: Role | null
 
 export default function Balancer() {
   const router = useRouter();
-  const [rows, setRows] = useState<DraftPlayer[]>(() => blankRows(10));
-  const [mode, setMode] = useState<BalanceMode>("mmr");
-  const [result, setResult] = useState<BalanceResult | null>(null);
+  // Persisted across reloads (roster, chosen mode, last result).
+  const [session, setSession] = usePersistentState<BalancerSession>(SESSION_KEY, DEFAULT_SESSION);
+  const { rows, mode, result } = session;
+  const setRows = (updater: DraftPlayer[] | ((prev: DraftPlayer[]) => DraftPlayer[])) =>
+    setSession((s) => ({ ...s, rows: typeof updater === "function" ? updater(s.rows) : updater }));
+  const setMode = (next: BalanceMode) => setSession((s) => ({ ...s, mode: next }));
+  const setResult = (next: BalanceResult | null) => setSession((s) => ({ ...s, result: next }));
+
+  // Transient UI state (not persisted).
   const [shuffleKey, setShuffleKey] = useState(0);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");

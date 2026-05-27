@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import type { Team } from "./types";
 
 const TEAMS_KEY = "dota-balancer:teams";
@@ -72,4 +72,104 @@ function subscribe(onChange: () => void): () => void {
 /** Read the saved teams reactively: `undefined` = loading, `null` = none saved. */
 export function useTeams(): Team[] | null | undefined {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+}
+
+// --- Generic persisted state ------------------------------------------------
+// A localStorage-backed store per key, read through useSyncExternalStore so it
+// stays SSR/hydration-safe (server + first paint use the fallback, then the
+// stored value swaps in) without ever calling setState inside an effect.
+
+interface PersistStore<T> {
+  getSnapshot: () => T;
+  getServerSnapshot: () => T;
+  write: (value: T) => void;
+  subscribe: (onChange: () => void) => () => void;
+}
+
+function createPersistStore<T>(key: string, fallback: T): PersistStore<T> {
+  const listeners = new Set<() => void>();
+  let cachedRaw: string | null = null;
+  let cached: T = fallback;
+  let initialized = false;
+
+  return {
+    getSnapshot() {
+      let raw: string | null = null;
+      try {
+        raw = localStorage.getItem(key);
+      } catch {
+        raw = null;
+      }
+      if (!initialized || raw !== cachedRaw) {
+        initialized = true;
+        cachedRaw = raw;
+        if (raw == null) {
+          cached = fallback;
+        } else {
+          try {
+            cached = JSON.parse(raw) as T;
+          } catch {
+            cached = fallback;
+          }
+        }
+      }
+      return cached;
+    },
+    getServerSnapshot() {
+      return fallback;
+    },
+    write(value: T) {
+      cached = value;
+      initialized = true;
+      try {
+        const raw = JSON.stringify(value);
+        cachedRaw = raw;
+        localStorage.setItem(key, raw);
+      } catch {
+        // ignore write failures
+      }
+      listeners.forEach((l) => l());
+    },
+    subscribe(onChange: () => void) {
+      listeners.add(onChange);
+      window.addEventListener("storage", onChange);
+      return () => {
+        listeners.delete(onChange);
+        window.removeEventListener("storage", onChange);
+      };
+    },
+  };
+}
+
+const persistStores = new Map<string, PersistStore<unknown>>();
+
+function getPersistStore<T>(key: string, fallback: T): PersistStore<T> {
+  let store = persistStores.get(key) as PersistStore<T> | undefined;
+  if (!store) {
+    store = createPersistStore<T>(key, fallback);
+    persistStores.set(key, store as PersistStore<unknown>);
+  }
+  return store;
+}
+
+/**
+ * State backed by localStorage under `key`, surviving reloads.
+ * Pass a stable `fallback` (module constant). Returns `[value, setValue]`
+ * where `setValue` accepts a value or an updater function.
+ */
+export function usePersistentState<T>(
+  key: string,
+  fallback: T
+): [T, (updater: T | ((prev: T) => T)) => void] {
+  const store = getPersistStore<T>(key, fallback);
+  const value = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
+  const set = useCallback(
+    (updater: T | ((prev: T) => T)) => {
+      const current = store.getSnapshot();
+      const next = typeof updater === "function" ? (updater as (prev: T) => T)(current) : updater;
+      store.write(next);
+    },
+    [store]
+  );
+  return [value, set];
 }
