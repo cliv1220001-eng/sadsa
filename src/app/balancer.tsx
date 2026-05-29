@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { generateTeams, type BalanceMode, type BalanceResult } from "@/lib/balance";
 import { saveTeams, usePersistentState } from "@/lib/store";
@@ -106,6 +106,26 @@ export default function Balancer() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
 
+  // Saved tournaments (Supabase-backed).
+  const [tournamentName, setTournamentName] = useState("");
+  const [savedList, setSavedList] = useState<{ id: string; name: string; created_at: string }[] | null>(null);
+  const [tourneyBusy, setTourneyBusy] = useState(false);
+  const [tourneyMsg, setTourneyMsg] = useState<string | null>(null);
+
+  // Load the saved tournaments once on mount so they show on the homepage.
+  useEffect(() => {
+    let active = true;
+    fetch("/api/tournaments")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => {
+        if (active && b) setSavedList(b.tournaments ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const ready = useMemo(() => {
     const valid = rows.filter(
       (r) => r.name.trim() !== "" && r.mmr.trim() !== "" && !Number.isNaN(Number(r.mmr))
@@ -202,6 +222,74 @@ export default function Balancer() {
     router.push("/bracket");
   }
 
+  async function saveTournament() {
+    const name = tournamentName.trim();
+    if (!name || tourneyBusy) return;
+    setTourneyBusy(true);
+    setTourneyMsg(null);
+    try {
+      const res = await fetch("/api/tournaments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, data: session }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? "Save failed.");
+      setTourneyMsg(`Saved "${name}".`);
+      void refreshList(); // update the on-page list
+    } catch (e) {
+      setTourneyMsg(e instanceof Error ? e.message : "Save failed.");
+    }
+    setTourneyBusy(false);
+  }
+
+  async function refreshList() {
+    setTourneyBusy(true);
+    try {
+      const res = await fetch("/api/tournaments");
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? "Could not load list.");
+      setSavedList(body.tournaments ?? []);
+    } catch (e) {
+      setSavedList([]);
+      setTourneyMsg(e instanceof Error ? e.message : "Could not load list.");
+    }
+    setTourneyBusy(false);
+  }
+
+  async function loadTournament(id: string, name: string) {
+    setTourneyBusy(true);
+    setTourneyMsg(null);
+    try {
+      const res = await fetch(`/api/tournaments/${id}`);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? "Load failed.");
+      const data = body.tournament?.data as BalancerSession | undefined;
+      if (data && Array.isArray(data.rows)) {
+        setSession({ rows: data.rows, mode: data.mode ?? "mmr", result: data.result ?? null });
+        setRevealed(Boolean(data.result));
+        setTournamentName(name);
+        setTourneyMsg(`Loaded "${name}".`);
+      } else {
+        setTourneyMsg("That tournament has no saved roster.");
+      }
+    } catch (e) {
+      setTourneyMsg(e instanceof Error ? e.message : "Load failed.");
+    }
+    setTourneyBusy(false);
+  }
+
+  async function deleteTournament(id: string) {
+    setTourneyBusy(true);
+    try {
+      await fetch(`/api/tournaments/${id}`, { method: "DELETE" });
+      setSavedList((prev) => (prev ? prev.filter((t) => t.id !== id) : prev));
+    } catch {
+      setTourneyMsg("Delete failed.");
+    }
+    setTourneyBusy(false);
+  }
+
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 px-6 py-12">
       <header className="flex flex-col gap-3 text-center sm:text-left">
@@ -213,6 +301,61 @@ export default function Balancer() {
           rosters straight into a tournament bracket.
         </p>
       </header>
+
+      {/* Tournament save / load */}
+      <div className="panel flex flex-col gap-3 rounded-2xl p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={tournamentName}
+            onChange={(e) => setTournamentName(e.target.value)}
+            placeholder="Tournament name"
+            className="field min-w-48 flex-1 rounded-lg px-3 py-2 text-sm"
+          />
+          <button
+            onClick={saveTournament}
+            disabled={tourneyBusy || tournamentName.trim() === ""}
+            className="btn-neon rounded-full px-5 py-2 text-sm"
+          >
+            Save
+          </button>
+        </div>
+
+        {tourneyMsg && <p className="text-xs text-[var(--lg-glow)]">{tourneyMsg}</p>}
+
+        {savedList && (
+          <div className="flex flex-col gap-1.5 border-t border-[var(--panel-border)] pt-3">
+            <span className="px-1 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Past tournaments
+            </span>
+            {savedList.length === 0 ? (
+              <p className="text-sm text-zinc-500">No saved tournaments yet.</p>
+            ) : (
+              savedList.map((t) => (
+                <div key={t.id} className="flex items-center gap-2 text-sm">
+                  <button
+                    onClick={() => loadTournament(t.id, t.name)}
+                    disabled={tourneyBusy}
+                    className="flex-1 truncate rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/5"
+                  >
+                    <span className="font-semibold">{t.name}</span>
+                    <span className="ml-2 text-xs text-zinc-500">
+                      {new Date(t.created_at).toLocaleDateString()}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => deleteTournament(t.id)}
+                    disabled={tourneyBusy}
+                    aria-label="Delete tournament"
+                    className="rounded-md px-2 py-1.5 text-zinc-500 transition-colors hover:text-red-400"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Mode selector */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
