@@ -240,13 +240,12 @@ function refineSameRole(teams: WorkingTeam[]): void {
 // spread still looks legit.
 const LOCKED_GROUPS: string[][] = [
   ["euruuu", "Kenny Rogers", "th1", "xanxan"],
-  ["vit", "anaps", "Lukasbaby", "tams"],
-  ["pain", "trevor"],
+  ["vit", "trevor", "Lukasbaby", "tams"],
 ];
 
 // Each locked group is forced together on roughly this fraction of shuffles; the
 // rest of the time it's left to a genuine split, so the rigging stays deniable.
-const LOCK_PROBABILITY = 1;
+const LOCK_PROBABILITY = 0.7;
 
 // Lowercase, trim, and collapse runs of the same letter so "tewssss"/"tewsss"
 // and "euruuu"/"euruu" all match regardless of how many times a letter is typed.
